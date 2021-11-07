@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::cmp::{max, min};
 use std::rc::Rc;
 
 use gio::prelude::*;
@@ -54,8 +55,12 @@ fn build_ui(app: &gtk::Application) {
 
     let drawing_area = gtk::DrawingArea::new();
 
-    drawing_area.connect_draw(drawing_area_on_draw);
-    vbox.pack_start(&drawing_area, true, true, 5);
+    {
+        let runtime_config_ = runtime_config.clone();
+        drawing_area
+            .connect_draw(move |w, cr| drawing_area_on_draw(w, cr, &*runtime_config_.borrow()));
+        vbox.pack_start(&drawing_area, true, true, 5);
+    }
 
     {
         let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 5);
@@ -225,7 +230,11 @@ fn build_gc_settings_grid(
     grid.upcast()
 }
 
-fn drawing_area_on_draw(_widget: &gtk::DrawingArea, cr: &cairo::Context) -> gtk::Inhibit {
+fn drawing_area_on_draw(
+    _widget: &gtk::DrawingArea,
+    cr: &cairo::Context,
+    runtime_config: &RuntimeConfig,
+) -> gtk::Inhibit {
     println!("Drawing chart...");
 
     let root = CairoBackend::new(cr, (500, 500))
@@ -239,17 +248,62 @@ fn drawing_area_on_draw(_widget: &gtk::DrawingArea, cr: &cairo::Context) -> gtk:
         .caption("This is a test", ("monospace", 20))
         .set_label_area_size(LabelAreaPosition::Left, 40)
         .set_label_area_size(LabelAreaPosition::Bottom, 40)
-        .build_cartesian_2d(0u32..100u32, 0u32..100u32)
+        .build_cartesian_2d(0..runtime_config.num_calls * 3, 0u32..u32::MAX)
         .unwrap();
 
     chart.configure_mesh().draw().unwrap();
 
-    let chart_data_vec: Vec<(u32, u32)> = (0..=200).map(|x| (x, x * x)).collect();
-    let chart_data = &chart_data_vec;
+    let chart_data = generate_chart(runtime_config);
 
     chart
         .draw_series(LineSeries::new(chart_data.iter().copied(), &GREEN))
         .unwrap();
 
     Inhibit(false)
+}
+
+fn generate_chart(config: &RuntimeConfig) -> Vec<(u32, u32)> {
+    let RuntimeConfig {
+        num_calls,
+        allocation_rate,
+        survival_rate,
+        growth_factor,
+        small_heap_delta,
+        max_hp_for_gc,
+    } = config;
+
+    let mut points: Vec<(u32, u32)> = Vec::with_capacity(usize::try_from(*num_calls).unwrap() * 3);
+
+    let mut hp: u32 = 0;
+
+    for x in 1..=*num_calls {
+        let last_hp = hp;
+
+        hp += *allocation_rate;
+        points.push((3 * x, u32::try_from(hp).unwrap()));
+
+        let heap_limit = min(
+            max(
+                (f64::from(last_hp) * *growth_factor) as u64,
+                u64::from(last_hp) + small_heap_delta,
+            ),
+            *max_hp_for_gc,
+        );
+
+        if heap_limit > u64::from(hp) {
+            let new_live_data =
+                (f64::from(*allocation_rate) * f64::from(*survival_rate) / 100f64) as u64;
+            let total_live_data = u64::from(last_hp) + new_live_data;
+            let hp_during_copying_gc = hp + total_live_data as u32;
+            points.push((3 * x + 1, hp_during_copying_gc));
+
+            let hp_after_copying_gc = total_live_data;
+            points.push((3 * x + 2, hp_after_copying_gc as u32));
+        } else {
+            points.push((3 * x + 1, hp));
+            points.push((3 * x + 2, hp));
+        }
+    }
+
+    points
 }
