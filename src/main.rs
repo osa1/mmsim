@@ -50,6 +50,21 @@ struct RuntimeConfig {
     max_hp_for_gc: u64,
 }
 
+impl Default for RuntimeConfig {
+    fn default() -> Self {
+        Self {
+            gc_strategy: GcStrategy::MarkCompact,
+            scheduler: Scheduler::New,
+            num_calls: 100_000,
+            allocation_rate: 100_000,
+            survival_rate: 50,
+            growth_factor: 1.5f64,
+            small_heap_delta: 10 * 1024 * 1024,    // 10 MiB
+            max_hp_for_gc: 2 * 1024 * 1024 * 1024, // 1 GiB
+        }
+    }
+}
+
 fn build_ui(app: &gtk::Application) {
     let window = gtk::ApplicationWindow::new(app);
 
@@ -57,16 +72,7 @@ fn build_ui(app: &gtk::Application) {
     // Settings are grids
     let vbox = gtk::Box::new(gtk::Orientation::Vertical, 5);
 
-    let runtime_config = Rc::new(RefCell::new(RuntimeConfig {
-        gc_strategy: GcStrategy::MarkCompact,
-        scheduler: Scheduler::New,
-        num_calls: 1000,
-        allocation_rate: 1000,
-        survival_rate: 100,
-        growth_factor: 1.5f64,
-        small_heap_delta: 10 * 1024 * 1024,    // 10 MiB
-        max_hp_for_gc: 1 * 1024 * 1024 * 1024, // 1 GiB
-    }));
+    let runtime_config = Rc::new(RefCell::new(RuntimeConfig::default()));
 
     let image = Image::new();
     vbox.pack_start(image.widget(), true, true, 5);
