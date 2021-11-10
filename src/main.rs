@@ -1,4 +1,7 @@
 mod graphviz;
+mod image_widget;
+
+use image_widget::Image;
 
 use std::cell::RefCell;
 use std::cmp::{max, min};
@@ -17,8 +20,23 @@ fn main() {
     application.run();
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
+enum GcStrategy {
+    MarkCompact,
+    Copying,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Scheduler {
+    Old,
+    New,
+}
+
+#[derive(Debug, Clone, Copy)]
 struct RuntimeConfig {
+    gc_strategy: GcStrategy,
+    scheduler: Scheduler,
+
     num_calls: u32,
 
     // bytes/call
@@ -35,11 +53,13 @@ struct RuntimeConfig {
 fn build_ui(app: &gtk::Application) {
     let window = gtk::ApplicationWindow::new(app);
 
-    // layout: vbox [ drawing_area, hbox [ settings1, settings2 ] ]
+    // layout: vbox [ image, hbox [ settings1, settings2 ] ]
     // Settings are grids
     let vbox = gtk::Box::new(gtk::Orientation::Vertical, 5);
 
     let runtime_config = Rc::new(RefCell::new(RuntimeConfig {
+        gc_strategy: GcStrategy::MarkCompact,
+        scheduler: Scheduler::New,
         num_calls: 1000,
         allocation_rate: 1000,
         survival_rate: 100,
@@ -48,21 +68,14 @@ fn build_ui(app: &gtk::Application) {
         max_hp_for_gc: 1 * 1024 * 1024 * 1024, // 1 GiB
     }));
 
-    let drawing_area = gtk::DrawingArea::new();
-
-    {
-        let runtime_config_ = runtime_config.clone();
-        drawing_area
-            .connect_draw(move |w, cr| drawing_area_on_draw(w, cr, &*runtime_config_.borrow()));
-        vbox.pack_start(&drawing_area, true, true, 5);
-    }
+    let image = Image::new();
+    vbox.pack_start(image.widget(), true, true, 5);
 
     {
         let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 5);
 
-        let mutator_settings =
-            build_mutator_settings_grid(&runtime_config, drawing_area.clone().upcast());
-        let gc_settings = build_gc_settings_grid(&runtime_config, drawing_area.upcast());
+        let mutator_settings = build_mutator_settings_grid(&runtime_config, &image);
+        let gc_settings = build_gc_settings_grid(&runtime_config, &image);
 
         hbox.pack_start(&mutator_settings, false, true, 0);
         hbox.pack_end(&gc_settings, false, true, 0);
@@ -77,7 +90,7 @@ fn build_ui(app: &gtk::Application) {
 
 fn build_mutator_settings_grid(
     runtime_config: &Rc<RefCell<RuntimeConfig>>,
-    drawing_area: gtk::Widget,
+    image: &Image,
 ) -> gtk::Widget {
     let grid = gtk::Grid::new();
 
@@ -89,13 +102,13 @@ fn build_mutator_settings_grid(
 
     {
         let runtime_config_ = runtime_config.clone();
-        let drawing_area_ = drawing_area.clone();
+        let image_ = image.clone();
         num_calls_entry.connect_activate(move |entry| {
             let value = entry.text().to_string();
             match str::parse::<u32>(&value) {
                 Ok(num_calls) => {
                     runtime_config_.borrow_mut().num_calls = num_calls;
-                    drawing_area_.queue_draw();
+                    update(*runtime_config_.borrow(), &image_);
                 }
                 Err(parse_err) => println!("Unable to parse number of calls: {:?}", parse_err),
             }
@@ -110,13 +123,13 @@ fn build_mutator_settings_grid(
 
     {
         let runtime_config_ = runtime_config.clone();
-        let drawing_area_ = drawing_area.clone();
+        let image_ = image.clone();
         allocation_rate_entry.connect_activate(move |entry| {
             let value = entry.text().to_string();
             match str::parse::<u32>(&value) {
                 Ok(allocation_rate) => {
                     runtime_config_.borrow_mut().allocation_rate = allocation_rate;
-                    drawing_area_.queue_draw();
+                    update(*runtime_config_.borrow(), &image_);
                 }
                 Err(parse_err) => println!("Unable to parse allocation rate: {:?}", parse_err),
             }
@@ -131,7 +144,7 @@ fn build_mutator_settings_grid(
 
     {
         let runtime_config_ = runtime_config.clone();
-        let drawing_area_ = drawing_area.clone();
+        let image_ = image.clone();
         survival_rate_entry.connect_activate(move |entry| {
             let value = entry.text().to_string();
             match str::parse::<u32>(&value) {
@@ -140,7 +153,7 @@ fn build_mutator_settings_grid(
                         println!("Survival rate needs to be in range 0-100");
                     } else {
                         runtime_config_.borrow_mut().survival_rate = survival_rate;
-                        drawing_area_.queue_draw();
+                        update(*runtime_config_.borrow(), &image_);
                     }
                 }
                 Err(parse_err) => println!("Unable to parse allocation rate: {:?}", parse_err),
@@ -160,7 +173,7 @@ fn build_mutator_settings_grid(
 
 fn build_gc_settings_grid(
     runtime_config: &Rc<RefCell<RuntimeConfig>>,
-    drawing_area: gtk::Widget,
+    image: &Image,
 ) -> gtk::Widget {
     let grid = gtk::Grid::new();
 
@@ -172,13 +185,13 @@ fn build_gc_settings_grid(
 
     {
         let runtime_config_ = runtime_config.clone();
-        let drawing_area_ = drawing_area.clone();
+        let image_ = image.clone();
         growth_factor_entry.connect_activate(move |entry| {
             let value = entry.text().to_string();
             match str::parse::<f64>(&value) {
                 Ok(growth_factor) => {
                     runtime_config_.borrow_mut().growth_factor = growth_factor;
-                    drawing_area_.queue_draw();
+                    update(*runtime_config_.borrow(), &image_);
                 }
                 Err(parse_err) => println!("Unable to parse growth factor: {:?}", parse_err),
             }
@@ -193,13 +206,13 @@ fn build_gc_settings_grid(
 
     {
         let runtime_config_ = runtime_config.clone();
-        let drawing_area_ = drawing_area.clone();
+        let image_ = image.clone();
         small_heap_delta_entry.connect_activate(move |entry| {
             let value = entry.text().to_string();
             match str::parse::<u64>(&value) {
                 Ok(small_heap_delta) => {
                     runtime_config_.borrow_mut().small_heap_delta = small_heap_delta;
-                    drawing_area_.queue_draw();
+                    update(*runtime_config_.borrow(), &image_);
                 }
                 Err(parse_err) => println!("Unable to parse small heap delta: {:?}", parse_err),
             }
@@ -214,13 +227,13 @@ fn build_gc_settings_grid(
 
     {
         let runtime_config_ = runtime_config.clone();
-        let drawing_area_ = drawing_area.clone();
+        let image_ = image.clone();
         max_hp_for_gc_entry.connect_activate(move |entry| {
             let value = entry.text().to_string();
             match str::parse::<u64>(&value) {
                 Ok(max_hp_for_gc) => {
                     runtime_config_.borrow_mut().max_hp_for_gc = max_hp_for_gc;
-                    drawing_area_.queue_draw();
+                    update(*runtime_config_.borrow(), &image_);
                 }
                 Err(parse_err) => println!("Unable to parse small heap delta: {:?}", parse_err),
             }
@@ -237,18 +250,28 @@ fn build_gc_settings_grid(
     grid.upcast()
 }
 
-fn drawing_area_on_draw(
-    _widget: &gtk::DrawingArea,
-    cr: &cairo::Context,
-    runtime_config: &RuntimeConfig,
-) -> gtk::Inhibit {
-    println!("Drawing chart...");
-
-    Inhibit(false)
+fn update(config: RuntimeConfig, widget: &Image) {
+    let Points { hp, high_water } = generate_points(config);
+    match graphviz::render(&hp, &high_water) {
+        Err(err) => {
+            println!("grpahviz error: {:?}", err);
+        }
+        Ok(image_path) => {
+            widget.set_image(&*image_path);
+        }
+    }
 }
 
-fn generate_chart(config: &RuntimeConfig) -> Vec<(u32, u32)> {
+#[derive(Debug)]
+struct Points {
+    hp: Vec<u32>,
+    high_water: Vec<u32>,
+}
+
+fn generate_points(config: RuntimeConfig) -> Points {
     let RuntimeConfig {
+        gc_strategy,
+        scheduler,
         num_calls,
         allocation_rate,
         survival_rate,
@@ -257,38 +280,105 @@ fn generate_chart(config: &RuntimeConfig) -> Vec<(u32, u32)> {
         max_hp_for_gc,
     } = config;
 
-    let mut points: Vec<(u32, u32)> = Vec::with_capacity(usize::try_from(*num_calls).unwrap() * 3);
+    let mut hp: Vec<u32> = Vec::with_capacity(config.num_calls as usize);
+    hp.push(0);
 
-    let mut hp: u32 = 0;
+    let mut high_water: Vec<u32> = Vec::with_capacity(config.num_calls as usize);
+    high_water.push(0);
 
-    for x in 1..=*num_calls {
-        let last_hp = hp;
+    // Heap pointer after last gc
+    let mut last_hp: u32 = 0;
 
-        hp += *allocation_rate;
-        points.push((3 * x, u32::try_from(hp).unwrap()));
+    // Current heap pointer
+    let mut hp_: u32 = 0;
 
-        let heap_limit = min(
-            max(
-                (f64::from(last_hp) * *growth_factor) as u64,
-                u64::from(last_hp) + small_heap_delta,
+    // High water mark for Wasm memory
+    // NB. This is in bytes, not rounded up to Wasm page size
+    let mut last_high_water: u32 = 0;
+
+    // Number of gcs
+    let mut num_gcs: u32 = 0;
+
+    // Number of calls made so far
+    let mut n_calls = 0;
+
+    for _ in 0..num_calls {
+        n_calls += 1;
+
+        const COPYING_GC_MAX_LIVE: u64 = 2 * 1024 * 1024 * 1024; // 2 GiB
+
+        // Mark stack ignored. Max. bitmap can be 130,150,524 bytes.
+        // (x + x / 32 = 4 GiB, x = 4,164,816,771, x/32 = 130,150,524)
+        const MARK_COMPACT_GC_MAX_LIVE: u64 = 4_164_816_771;
+        const MARK_COMPACT_GC_MAX_BITMAP_SIZE: u32 = 130_150_524;
+
+        let heap_limit = match scheduler {
+            Scheduler::Old => min(
+                max(
+                    (f64::from(last_hp) * growth_factor) as u64,
+                    u64::from(last_hp) + small_heap_delta,
+                ),
+                max_hp_for_gc,
             ),
-            *max_hp_for_gc,
-        );
+            Scheduler::New => {
+                let max_live = match gc_strategy {
+                    GcStrategy::MarkCompact => MARK_COMPACT_GC_MAX_LIVE,
+                    GcStrategy::Copying => COPYING_GC_MAX_LIVE,
+                };
+                min(
+                    (f64::from(last_hp) * growth_factor) as u64,
+                    (u64::from(last_hp) + max_live) / 2,
+                )
+            }
+        };
 
-        if heap_limit > u64::from(hp) {
-            let new_live_data =
-                (f64::from(*allocation_rate) * f64::from(*survival_rate) / 100f64) as u64;
-            let total_live_data = u64::from(last_hp) + new_live_data;
-            let hp_during_copying_gc = hp + total_live_data as u32;
-            points.push((3 * x + 1, hp_during_copying_gc));
+        hp_ += allocation_rate;
 
-            let hp_after_copying_gc = total_live_data;
-            points.push((3 * x + 2, hp_after_copying_gc as u32));
+        if u64::from(hp_) >= heap_limit {
+            num_gcs += 1;
+
+            // New allocations since last GC
+            let new_allocs = hp_ - last_hp;
+
+            // Live data since last GC
+            let new_live = (f64::from(new_allocs) * f64::from(survival_rate) / 100f64) as u32;
+
+            // Do GC
+            match gc_strategy {
+                GcStrategy::MarkCompact => {
+                    // Mark-compact GC only allocates a bitmap. Mark stack size is ignored.
+                    match hp_.checked_add(MARK_COMPACT_GC_MAX_BITMAP_SIZE) {
+                        Some(high_water) => last_high_water = max(last_high_water, high_water),
+                        None => break,
+                    }
+                }
+                GcStrategy::Copying => {
+                    // Copying GC copies the entire live heap to another space and then back
+                    let copied = last_hp + new_live;
+                    match hp_.checked_add(copied) {
+                        Some(high_water) => last_high_water = max(last_high_water, high_water),
+                        None => break,
+                    }
+                }
+            }
+
+            hp_ = last_hp + new_live;
+            high_water.push(last_high_water);
+            hp.push(hp_);
+            last_hp = hp_;
+
+            println!("GC=YES, hp={}, high water={}", hp_, last_high_water);
         } else {
-            points.push((3 * x + 1, hp));
-            points.push((3 * x + 2, hp));
+            // No GC
+            last_high_water = max(last_high_water, hp_);
+            high_water.push(last_high_water);
+            hp.push(hp_);
+
+            println!("GC=NO, hp={}, high water={}", hp_, last_high_water);
         }
     }
 
-    points
+    println!("GCs={}, total_calls={}", num_gcs, n_calls);
+
+    Points { hp, high_water }
 }
