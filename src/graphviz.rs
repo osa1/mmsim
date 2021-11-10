@@ -78,6 +78,6 @@ set ylabel "bytes"
 
 set xrange [0:$XRANGE]
 
-plot $HP_CSV_PATH using 0:1 with linespoints title "HP (canister allocs)", \
-     $WASM_MEM_CSV_PATH using 0:1 with linespoints title "Wasm memory (runtime allocs)"
+plot "$HP_CSV_PATH" using 0:1 with linespoints title "HP (canister allocs)", \
+     "$WASM_MEM_CSV_PATH" using 0:1 with linespoints title "Wasm memory (runtime allocs)"
 "###;
