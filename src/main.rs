@@ -5,21 +5,14 @@ use std::rc::Rc;
 use gio::prelude::*;
 use gtk::prelude::*;
 
-use plotters::prelude::*;
-use plotters_cairo::CairoBackend;
-
 fn main() {
-    let application = gtk::Application::new(
-        Some("io.github.plotters-rs.plotters-gtk-test"),
-        Default::default(),
-    )
-    .expect("Initialization failed");
+    let application = gtk::Application::new(Some("net.osa1.mmsim"), Default::default());
 
     application.connect_activate(|app| {
         build_ui(app);
     });
 
-    application.run(&std::env::args().collect::<Vec<_>>());
+    application.run();
 }
 
 #[derive(Debug, Clone)]
@@ -94,7 +87,7 @@ fn build_mutator_settings_grid(
         let runtime_config_ = runtime_config.clone();
         let drawing_area_ = drawing_area.clone();
         num_calls_entry.connect_activate(move |entry| {
-            let value = entry.get_text().to_string();
+            let value = entry.text().to_string();
             match str::parse::<u32>(&value) {
                 Ok(num_calls) => {
                     runtime_config_.borrow_mut().num_calls = num_calls;
@@ -113,7 +106,7 @@ fn build_mutator_settings_grid(
         let runtime_config_ = runtime_config.clone();
         let drawing_area_ = drawing_area.clone();
         allocation_rate_entry.connect_activate(move |entry| {
-            let value = entry.get_text().to_string();
+            let value = entry.text().to_string();
             match str::parse::<u32>(&value) {
                 Ok(allocation_rate) => {
                     runtime_config_.borrow_mut().allocation_rate = allocation_rate;
@@ -132,7 +125,7 @@ fn build_mutator_settings_grid(
         let runtime_config_ = runtime_config.clone();
         let drawing_area_ = drawing_area.clone();
         survival_rate_entry.connect_activate(move |entry| {
-            let value = entry.get_text().to_string();
+            let value = entry.text().to_string();
             match str::parse::<u32>(&value) {
                 Ok(survival_rate) => {
                     if survival_rate > 100 {
@@ -171,7 +164,7 @@ fn build_gc_settings_grid(
         let runtime_config_ = runtime_config.clone();
         let drawing_area_ = drawing_area.clone();
         growth_factor_entry.connect_activate(move |entry| {
-            let value = entry.get_text().to_string();
+            let value = entry.text().to_string();
             match str::parse::<f64>(&value) {
                 Ok(growth_factor) => {
                     runtime_config_.borrow_mut().growth_factor = growth_factor;
@@ -190,7 +183,7 @@ fn build_gc_settings_grid(
         let runtime_config_ = runtime_config.clone();
         let drawing_area_ = drawing_area.clone();
         small_heap_delta_entry.connect_activate(move |entry| {
-            let value = entry.get_text().to_string();
+            let value = entry.text().to_string();
             match str::parse::<u64>(&value) {
                 Ok(small_heap_delta) => {
                     runtime_config_.borrow_mut().small_heap_delta = small_heap_delta;
@@ -209,7 +202,7 @@ fn build_gc_settings_grid(
         let runtime_config_ = runtime_config.clone();
         let drawing_area_ = drawing_area.clone();
         max_hp_for_gc_entry.connect_activate(move |entry| {
-            let value = entry.get_text().to_string();
+            let value = entry.text().to_string();
             match str::parse::<u64>(&value) {
                 Ok(max_hp_for_gc) => {
                     runtime_config_.borrow_mut().max_hp_for_gc = max_hp_for_gc;
@@ -236,28 +229,6 @@ fn drawing_area_on_draw(
     runtime_config: &RuntimeConfig,
 ) -> gtk::Inhibit {
     println!("Drawing chart...");
-
-    let root = CairoBackend::new(cr, (500, 500))
-        .unwrap()
-        .into_drawing_area();
-
-    root.fill(&WHITE).unwrap();
-    let root = root.margin(25, 25, 25, 25);
-
-    let mut chart = ChartBuilder::on(&root)
-        .caption("This is a test", ("monospace", 20))
-        .set_label_area_size(LabelAreaPosition::Left, 40)
-        .set_label_area_size(LabelAreaPosition::Bottom, 40)
-        .build_cartesian_2d(0..runtime_config.num_calls * 3, 0u32..u32::MAX)
-        .unwrap();
-
-    chart.configure_mesh().draw().unwrap();
-
-    let chart_data = generate_chart(runtime_config);
-
-    chart
-        .draw_series(LineSeries::new(chart_data.iter().copied(), &GREEN))
-        .unwrap();
 
     Inhibit(false)
 }
