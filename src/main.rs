@@ -1,3 +1,5 @@
+mod graphviz;
+
 use std::cell::RefCell;
 use std::cmp::{max, min};
 use std::rc::Rc;
