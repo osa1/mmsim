@@ -80,6 +80,8 @@ fn build_mutator_settings_grid(
     let grid = gtk::Grid::new();
 
     let num_calls_label = gtk::Label::new(Some("Number of calls:"));
+    num_calls_label.set_halign(gtk::Align::End);
+
     let num_calls_entry = gtk::Entry::new();
     num_calls_entry.set_text(&runtime_config.borrow().num_calls.to_string());
 
@@ -99,6 +101,8 @@ fn build_mutator_settings_grid(
     }
 
     let allocation_rate_label = gtk::Label::new(Some("Allocation rate (bytes/call):"));
+    allocation_rate_label.set_halign(gtk::Align::End);
+
     let allocation_rate_entry = gtk::Entry::new();
     allocation_rate_entry.set_text(&runtime_config.borrow().allocation_rate.to_string());
 
@@ -118,6 +122,8 @@ fn build_mutator_settings_grid(
     }
 
     let survival_rate_label = gtk::Label::new(Some("Survival rate (%):"));
+    survival_rate_label.set_halign(gtk::Align::End);
+
     let survival_rate_entry = gtk::Entry::new();
     survival_rate_entry.set_text(&runtime_config.borrow().survival_rate.to_string());
 
@@ -157,6 +163,8 @@ fn build_gc_settings_grid(
     let grid = gtk::Grid::new();
 
     let growth_factor_label = gtk::Label::new(Some("Heap growth factor:"));
+    growth_factor_label.set_halign(gtk::Align::End);
+
     let growth_factor_entry = gtk::Entry::new();
     growth_factor_entry.set_text(&runtime_config.borrow().growth_factor.to_string());
 
@@ -176,6 +184,8 @@ fn build_gc_settings_grid(
     }
 
     let small_heap_delta_label = gtk::Label::new(Some("Small heap delta: (bytes)"));
+    small_heap_delta_label.set_halign(gtk::Align::End);
+
     let small_heap_delta_entry = gtk::Entry::new();
     small_heap_delta_entry.set_text(&runtime_config.borrow().small_heap_delta.to_string());
 
@@ -195,6 +205,8 @@ fn build_gc_settings_grid(
     }
 
     let max_hp_for_gc_label = gtk::Label::new(Some("Max hp for GC:"));
+    max_hp_for_gc_label.set_halign(gtk::Align::End);
+
     let max_hp_for_gc_entry = gtk::Entry::new();
     max_hp_for_gc_entry.set_text(&runtime_config.borrow().max_hp_for_gc.to_string());
 
