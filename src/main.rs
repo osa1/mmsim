@@ -75,7 +75,7 @@ fn build_ui(app: &gtk::Application) {
     let runtime_config = Rc::new(RefCell::new(RuntimeConfig::default()));
 
     let image = Image::new();
-    vbox.pack_start(image.widget(), true, true, 5);
+    vbox.pack_start(image.widget(), true, true, 0);
 
     {
         let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 5);
