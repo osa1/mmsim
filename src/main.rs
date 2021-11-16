@@ -30,6 +30,7 @@ enum GcStrategy {
 enum Scheduler {
     Old,
     New,
+    AfterEveryMsg,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -185,7 +186,8 @@ fn build_gc_settings_grid(
 ) -> gtk::Widget {
     let grid = gtk::Grid::new();
 
-    let gc_strategy_label = gtk::Label::new(Some("GC strategy"));
+    let gc_strategy_label = gtk::Label::new(Some("GC strategy:"));
+    gc_strategy_label.set_halign(gtk::Align::End);
 
     let gc_strategies_combo = {
         let gc_strategies_list = gtk::ListStore::new(&[glib::types::Type::STRING]);
@@ -217,12 +219,17 @@ fn build_gc_settings_grid(
         });
     }
 
-    let scheduler_label = gtk::Label::new(Some("Scheduler"));
+    let scheduler_label = gtk::Label::new(Some("Scheduler:"));
+    scheduler_label.set_halign(gtk::Align::End);
 
     let scheduler_combo = {
         let scheduler_list = gtk::ListStore::new(&[glib::types::Type::STRING]);
         scheduler_list.set(&scheduler_list.append(), &[(0, &"Old".to_value())]);
         scheduler_list.set(&scheduler_list.append(), &[(0, &"New".to_value())]);
+        scheduler_list.set(
+            &scheduler_list.append(),
+            &[(0, &"After every GC".to_value())],
+        );
 
         gtk::ComboBox::with_model_and_entry(&scheduler_list)
     };
@@ -240,6 +247,10 @@ fn build_gc_settings_grid(
             }
             Some(1) => {
                 runtime_config_.borrow_mut().scheduler = Scheduler::New;
+                update(*runtime_config_.borrow(), &image_);
+            }
+            Some(2) => {
+                runtime_config_.borrow_mut().scheduler = Scheduler::AfterEveryMsg;
                 update(*runtime_config_.borrow(), &image_);
             }
             _ => panic!(),
@@ -405,6 +416,7 @@ fn generate_points(config: RuntimeConfig) -> Points {
                     (u64::from(last_hp) + max_live) / 2,
                 )
             }
+            Scheduler::AfterEveryMsg => 0,
         };
 
         hp_ += allocation_rate;
@@ -453,7 +465,7 @@ fn generate_points(config: RuntimeConfig) -> Points {
         }
     }
 
-    // println!("GCs={}, total_calls={}", num_gcs, n_calls);
+    println!("GCs={}, total_calls={}", num_gcs, n_calls);
 
     Points { hp, high_water }
 }
