@@ -53,8 +53,8 @@ struct RuntimeConfig {
 impl Default for RuntimeConfig {
     fn default() -> Self {
         Self {
-            gc_strategy: GcStrategy::MarkCompact,
-            scheduler: Scheduler::New,
+            gc_strategy: GcStrategy::Copying,
+            scheduler: Scheduler::Old,
             num_calls: 100_000,
             allocation_rate: 100_000,
             survival_rate: 50,
@@ -92,6 +92,8 @@ fn build_ui(app: &gtk::Application) {
     window.set_default_size(500, 500);
     window.add(&vbox);
     window.show_all();
+
+    update(*runtime_config.borrow(), &image);
 }
 
 fn build_mutator_settings_grid(
@@ -183,6 +185,67 @@ fn build_gc_settings_grid(
 ) -> gtk::Widget {
     let grid = gtk::Grid::new();
 
+    let gc_strategy_label = gtk::Label::new(Some("GC strategy"));
+
+    let gc_strategies_combo = {
+        let gc_strategies_list = gtk::ListStore::new(&[glib::types::Type::STRING]);
+        gc_strategies_list.set(&gc_strategies_list.append(), &[(0, &"Copying".to_value())]);
+        gc_strategies_list.set(
+            &gc_strategies_list.append(),
+            &[(0, &"Mark-compact".to_value())],
+        );
+
+        gtk::ComboBox::with_model_and_entry(&gc_strategies_list)
+    };
+
+    gc_strategies_combo.set_entry_text_column(0);
+    gc_strategies_combo.set_active(Some(0));
+
+    {
+        let runtime_config_ = runtime_config.clone();
+        let image_ = image.clone();
+        gc_strategies_combo.connect_changed(move |combo| match combo.active() {
+            Some(0) => {
+                runtime_config_.borrow_mut().gc_strategy = GcStrategy::Copying;
+                update(*runtime_config_.borrow(), &image_);
+            }
+            Some(1) => {
+                runtime_config_.borrow_mut().gc_strategy = GcStrategy::MarkCompact;
+                update(*runtime_config_.borrow(), &image_);
+            }
+            _ => panic!(),
+        });
+    }
+
+    let scheduler_label = gtk::Label::new(Some("Scheduler"));
+
+    let scheduler_combo = {
+        let scheduler_list = gtk::ListStore::new(&[glib::types::Type::STRING]);
+        scheduler_list.set(&scheduler_list.append(), &[(0, &"Old".to_value())]);
+        scheduler_list.set(&scheduler_list.append(), &[(0, &"New".to_value())]);
+
+        gtk::ComboBox::with_model_and_entry(&scheduler_list)
+    };
+
+    scheduler_combo.set_entry_text_column(0);
+    scheduler_combo.set_active(Some(0));
+
+    {
+        let runtime_config_ = runtime_config.clone();
+        let image_ = image.clone();
+        scheduler_combo.connect_changed(move |combo| match combo.active() {
+            Some(0) => {
+                runtime_config_.borrow_mut().scheduler = Scheduler::Old;
+                update(*runtime_config_.borrow(), &image_);
+            }
+            Some(1) => {
+                runtime_config_.borrow_mut().scheduler = Scheduler::New;
+                update(*runtime_config_.borrow(), &image_);
+            }
+            _ => panic!(),
+        });
+    }
+
     let growth_factor_label = gtk::Label::new(Some("Heap growth factor:"));
     growth_factor_label.set_halign(gtk::Align::End);
 
@@ -246,12 +309,16 @@ fn build_gc_settings_grid(
         });
     }
 
-    grid.attach(&growth_factor_label, 0, 0, 1, 1);
-    grid.attach(&growth_factor_entry, 1, 0, 1, 1);
-    grid.attach(&small_heap_delta_label, 0, 1, 1, 1);
-    grid.attach(&small_heap_delta_entry, 1, 1, 1, 1);
-    grid.attach(&max_hp_for_gc_label, 0, 2, 1, 1);
-    grid.attach(&max_hp_for_gc_entry, 1, 2, 1, 1);
+    grid.attach(&gc_strategy_label, 0, 0, 1, 1);
+    grid.attach(&gc_strategies_combo, 1, 0, 1, 1);
+    grid.attach(&scheduler_label, 0, 1, 1, 1);
+    grid.attach(&scheduler_combo, 1, 1, 1, 1);
+    grid.attach(&growth_factor_label, 0, 2, 1, 1);
+    grid.attach(&growth_factor_entry, 1, 2, 1, 1);
+    grid.attach(&small_heap_delta_label, 0, 3, 1, 1);
+    grid.attach(&small_heap_delta_entry, 1, 3, 1, 1);
+    grid.attach(&max_hp_for_gc_label, 0, 4, 1, 1);
+    grid.attach(&max_hp_for_gc_entry, 1, 4, 1, 1);
 
     grid.upcast()
 }
@@ -303,9 +370,11 @@ fn generate_points(config: RuntimeConfig) -> Points {
     let mut last_high_water: u32 = 0;
 
     // Number of gcs
+    #[allow(unused)]
     let mut num_gcs: u32 = 0;
 
     // Number of calls made so far
+    #[allow(unused)]
     let mut n_calls = 0;
 
     for _ in 0..num_calls {
@@ -373,18 +442,18 @@ fn generate_points(config: RuntimeConfig) -> Points {
             hp.push(hp_);
             last_hp = hp_;
 
-            println!("GC=YES, hp={}, high water={}", hp_, last_high_water);
+            // println!("GC=YES, hp={}, high water={}", hp_, last_high_water);
         } else {
             // No GC
             last_high_water = max(last_high_water, hp_);
             high_water.push(last_high_water);
             hp.push(hp_);
 
-            println!("GC=NO, hp={}, high water={}", hp_, last_high_water);
+            // println!("GC=NO, hp={}, high water={}", hp_, last_high_water);
         }
     }
 
-    println!("GCs={}, total_calls={}", num_gcs, n_calls);
+    // println!("GCs={}, total_calls={}", num_gcs, n_calls);
 
     Points { hp, high_water }
 }
